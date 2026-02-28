@@ -1,20 +1,63 @@
 #!/bin/bash
 
-# Settings
-worktree_path="/c/code/pivot-backend.worktree"
+usage="Usage: dw --source-path <source_path> --worktree <worktree_folder_name>"
 
-# Truncated usage message
-usage="Usage: dw <worktree_folder_name>"
-
-# Check if the correct number of arguments are provided
-if [ "$#" -ne 1 ]; then
+print_usage() {
     echo "$usage"
-    echo "  <worktree_folder_name>  Name of the worktree folder to delete"
+    echo "  --source-path   Source repository path"
+    echo "  --worktree      Name of the worktree folder to delete"
+}
+
+require_flag_value() {
+    local flag_name="$1"
+    local flag_value="$2"
+
+    if [ -z "$flag_value" ] || [[ "$flag_value" == --* ]]; then
+        echo "Missing value for $flag_name"
+        print_usage
+        exit 1
+    fi
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --source-path)
+            require_flag_value "$1" "$2"
+            source_path="$2"
+            shift 2
+            ;;
+        --worktree)
+            require_flag_value "$1" "$2"
+            worktree_folder_name="$2"
+            shift 2
+            ;;
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+        *)
+            echo "Invalid argument: $1"
+            print_usage
+            exit 1
+            ;;
+    esac
+done
+
+if [ -z "$source_path" ] || [ -z "$worktree_folder_name" ]; then
+    print_usage
     exit 1
 fi
 
-# Get the worktree name from the input parameter
-worktree_folder_name="${1,,}"  # Convert to lowercase
+source_path="${source_path%/}"
+worktree_path="${source_path}.worktree"
+worktree_folder_name="${worktree_folder_name,,}"
+
+if [ ! -d "$source_path" ]; then
+    echo "Source path does not exist: $source_path"
+    exit 1
+fi
+
+cd "$source_path" || exit 1
 
 # Delete the git worktree
 git worktree remove -f "$worktree_path/$worktree_folder_name"

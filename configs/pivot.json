@@ -1,0 +1,46 @@
+{
+  "sourcePath": "/c/code/pivot-backend",
+  "destinationPath": "/c/code/pivot-backend.worktree",
+  "copyOperations": [
+    {
+      "from": "src/Pivot.Api/appsettings.Development.json",
+      "to": "src/Pivot.Api/"
+    },
+    {
+      "from": "src/Pivot.Api/appsettings.Epic.json",
+      "to": "src/Pivot.Api/"
+    },
+    {
+      "from": "src/Pivot.Api.Shard.Management/appsettings.Development.json",
+      "to": "src/Pivot.Api.Shard.Management/"
+    },
+    {
+      "from": "src/_Tests/Pivot.Service.Tests/appsettings.Development.json",
+      "to": "src/_Tests/Pivot.Service.Tests/"
+    },
+    {
+      "from": "src/Migrator/appsettings.Development.json",
+      "to": "src/Migrator/"
+    },
+    {
+      "from": "src/Pivot.Functions/local.settings.json",
+      "to": "src/Pivot.Functions/"
+    },
+    {
+      "from": "src/Pivot.AlertHandler/local.settings.json",
+      "to": "src/Pivot.AlertHandler/"
+    },
+    {
+      "from": "src/Pivot.JiraSync/local.settings.json",
+      "to": "src/Pivot.JiraSync/"
+    },
+    {
+      "from": "src/Pivot.Autopayments/local.settings.json",
+      "to": "src/Pivot.Autopayments/"
+    },
+    {
+      "from": "src/Pivot.HubSpotSync/local.settings.json",
+      "to": "src/Pivot.HubSpotSync/"
+    }
+  ]
+}
