@@ -61,8 +61,8 @@ validate_dependencies() {
         missing+=("dotnet")
     fi
 
-    if [[ ! -x "/c/tonic/shell-scripts/git/update-service-worker-appsettings.sh" ]]; then
-        missing+=("/c/tonic/shell-scripts/git/update-service-worker-appsettings.sh")
+    if [[ ! -x "/c/code/shell-scripts/src/update-service-worker-appsettings.sh" ]]; then
+        missing+=("/c/code/shell-scripts/src/update-service-worker-appsettings.sh")
     fi
 
     if [[ ${#missing[@]} -gt 0 ]]; then
@@ -159,7 +159,7 @@ else
 fi
 
 log_info "Updating service worker appsettings for $target_worktree_path"
-/c/tonic/shell-scripts/git/update-service-worker-appsettings.sh "$target_worktree_path"
+/c/code/shell-scripts/src/update-service-worker-appsettings.sh "$target_worktree_path"
 
 log_info "Pivot worktree created successfully: $target_worktree_path"
 exit 0
