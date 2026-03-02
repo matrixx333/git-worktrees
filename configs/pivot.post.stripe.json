@@ -31,6 +31,10 @@
       "to": "src/Pivot.AlertHandler/"
     },
     {
+      "from": "src/Pivot.Autopayments/local.settings.json",
+      "to": "src/Pivot.Autopayments/"
+    },
+    {
       "from": "src/Pivot.HubSpotSync/local.settings.json",
       "to": "src/Pivot.HubSpotSync/"
     }
