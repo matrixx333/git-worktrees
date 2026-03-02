@@ -149,9 +149,9 @@ log_info "Creating Pivot worktree '$worktree_folder_name' from '$source_path'"
     --config "$config_path"
 
 if [[ "$skip_steps" != true ]]; then
-    log_info "Running dotnet build in $target_worktree_path"
+    log_info "Running dotnet build in $target_worktree_path/src"
     (
-        cd -- "$target_worktree_path"
+        cd -- "$target_worktree_path/src"
         dotnet build
     )
 else

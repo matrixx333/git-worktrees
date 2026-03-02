@@ -6,6 +6,8 @@ worktree_folder_name=""
 delete_branch=true
 force=false
 dry_run=false
+worktree_found=false
+worktree_remove_attempted=false
 
 usage="Usage: dw --source-path <source_path> --worktree <worktree_folder_name> [--no-delete-branch] [--force] [--dry-run]"
 
@@ -58,6 +60,27 @@ validate_dependencies() {
     fi
 
     return 0
+}
+
+resolve_source_repo_path() {
+    local -r candidate_path="$1"
+    local base_path=""
+
+    if git -C "$candidate_path" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        printf '%s\n' "$candidate_path"
+        return 0
+    fi
+
+    if [[ "$candidate_path" == *.worktree ]]; then
+        base_path="${candidate_path%.worktree}"
+        if [[ -d "$base_path" ]] && git -C "$base_path" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            log_warn "--source-path points to a .worktree directory. Using source repository path: $base_path"
+            printf '%s\n' "$base_path"
+            return 0
+        fi
+    fi
+
+    return 1
 }
 
 run_cmd() {
@@ -139,8 +162,6 @@ if [[ "$worktree_folder_name" == */* || "$worktree_folder_name" == ".." || "$wor
 fi
 
 source_path="${source_path%/}"
-worktree_path="${source_path}.worktree"
-target_worktree_path="$worktree_path/$worktree_folder_name"
 
 if [[ ! -d "$source_path" ]]; then
     log_error "Source path does not exist: $source_path"
@@ -149,23 +170,31 @@ fi
 
 validate_dependencies
 
-cd -- "$source_path"
-
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+if ! source_path="$(resolve_source_repo_path "$source_path")"; then
     log_error "Source path is not a git repository: $source_path"
     exit 1
 fi
 
-if [[ ! -d "$target_worktree_path" ]]; then
-    log_error "Worktree path does not exist: $target_worktree_path"
-    exit 1
+worktree_path="${source_path}.worktree"
+target_worktree_path="$worktree_path/$worktree_folder_name"
+
+cd -- "$source_path"
+
+if [[ -d "$target_worktree_path" ]]; then
+    worktree_found=true
+    log_info "Removing worktree: $target_worktree_path"
+    run_cmd git worktree remove -f -- "$target_worktree_path"
+    worktree_remove_attempted=true
+else
+    log_warn "Worktree path does not exist: $target_worktree_path"
 fi
 
-log_info "Removing worktree: $target_worktree_path"
-run_cmd git worktree remove -f -- "$target_worktree_path"
-
 if [[ "$delete_branch" != true ]]; then
-    log_info "Worktree removed. Branch deletion skipped (--no-delete-branch)."
+    if [[ "$worktree_remove_attempted" == true ]]; then
+        log_info "Worktree removed. Branch deletion skipped (--no-delete-branch)."
+    else
+        log_info "Branch deletion skipped (--no-delete-branch). No worktree removal was needed."
+    fi
     exit 0
 fi
 
@@ -176,18 +205,32 @@ if ! branch_name="$(resolve_branch_by_worktree_name "$worktree_folder_name")"; t
     else
         log_warn "No branch associated with worktree '$worktree_folder_name' found."
     fi
-    log_info "Worktree removed successfully."
+    if [[ "$worktree_remove_attempted" == true ]]; then
+        log_info "Worktree removed successfully."
+    elif [[ "$worktree_found" == true ]]; then
+        log_info "Worktree removal was attempted."
+    else
+        log_info "No worktree or branch changes were required."
+    fi
     exit 0
 fi
 
 if [[ "$force" != true ]]; then
     log_warn "Branch deletion is blocked by default. Use --force to delete: $branch_name"
-    log_info "Worktree removed successfully."
+    if [[ "$worktree_remove_attempted" == true ]]; then
+        log_info "Worktree removed successfully."
+    else
+        log_info "Worktree is already absent."
+    fi
     exit 0
 fi
 
 log_info "Deleting branch: $branch_name"
 run_cmd git branch -D -- "$branch_name"
-log_info "Worktree '$worktree_folder_name' and branch '$branch_name' deleted successfully."
+if [[ "$worktree_remove_attempted" == true ]]; then
+    log_info "Worktree '$worktree_folder_name' and branch '$branch_name' deleted successfully."
+else
+    log_info "Branch '$branch_name' deleted successfully. Worktree was already absent."
+fi
 
 exit 0
