@@ -1,63 +1,135 @@
-# Git Worktrees Scripts
+# worktrees-cli
 
-## `pcw` (Pivot create worktree)
+> Interactive CLI for creating and managing Git worktrees with guided prompts and project-specific workflows.
 
-Use `src/pivot-create-worktree.sh` to create a Pivot worktree with defaults:
-- `--source-path` defaults to `/c/code/pivot-backend`
-- `--config` defaults to `configs/pivot.json`
-- runs `dotnet build` unless `--skip-steps` is set
-- runs service worker appsettings update script after creation
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/typescript-5.x-blue)](https://www.typescriptlang.org)
 
-Example:
+Git worktrees let you check out multiple branches simultaneously in separate directories — but the raw Git commands can be verbose and error-prone. `worktrees-cli` wraps the workflow in interactive prompts that validate your inputs, handle cleanup on failure, and automate repetitive setup steps.
+
+## Features
+
+- **Interactive prompts** — step-by-step guidance via `@clack/prompts` with real-time input validation
+- **Create worktrees** — specify folder name, branch, and remote tracking ref, with automatic `.vscode` settings copy and VS Code launch
+- **Delete worktrees** — remove a worktree and optionally its associated branch with fuzzy name matching
+- **Rollback on failure** — if worktree creation fails, the CLI automatically cleans up partial state
+- **Pivot project support** — extended workflow for .NET projects: copies config files and runs `dotnet build` post-creation
+- **Bash scripts** — standalone shell scripts for CI/CD or scripted usage without interactive prompts
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org) >= 18
+- Git
+
+## Installation
+
+Install globally so you can run `worktrees-cli` from any directory:
 
 ```bash
-bash src/pivot-create-worktree.sh --worktree my-feature --branch feature/my-feature
+npm install
+npm run build
+npm link
 ```
 
-Optional alias:
+Then run from anywhere:
 
 ```bash
-alias pcw='bash /c/code/git-worktrees/src/pivot-create-worktree.sh'
+worktrees-cli
 ```
 
-## `cw` (Create worktree)
-
-Use `src/create-worktree.sh` to create a new git worktree from a source repo.
-- requires `--source-path`, `--worktree`, and `--branch`
-- creates worktree at `<source-path>.worktree/<worktree>`
-- tracks `--remote` branch (default: `origin/main`)
-- can copy files using `--config` JSON `copyOperations`
-- copies `.vscode` from source repo when present
-
-Example:
+To uninstall:
 
 ```bash
-bash src/create-worktree.sh --source-path /c/code/pivot-backend --worktree my-feature --branch feature/my-feature --config configs/pivot.json
+npm unlink -g worktrees-cli
 ```
 
-Optional alias:
+## Getting Started
 
 ```bash
-alias cw='bash /c/code/git-worktrees/src/create-worktree.sh'
+npm install
+npm run dev
 ```
 
-## `dw` (Delete worktree)
+The CLI displays an interactive menu. Use arrow keys to select an action and follow the prompts.
 
-Use `src/delete-worktree.sh` to remove a worktree and optionally delete its branch.
-- requires `--source-path` and `--worktree`
-- deletes the worktree path at `<source-path>.worktree/<worktree>`
-- branch deletion is enabled by default but requires `--force`
-- use `--no-delete-branch` to remove only the worktree
-- use `--dry-run` to preview commands
+## Workflows
 
-Example:
+### Create a worktree
+
+1. Enter the **folder name** for the new worktree
+2. Enter the **branch name** to create
+3. Optionally specify a **remote ref** to track (defaults to `origin/main`)
+
+The CLI validates each input, creates the worktree, copies `.vscode` settings, and opens the folder in VS Code.
+
+### Delete a worktree
+
+1. Enter the **folder name** of the worktree to remove
+2. Choose whether to **delete the associated branch** (fuzzy-matched by folder name)
+
+### Pivot workflow
+
+When running inside a Pivot (.NET) project, the create workflow gains extra steps:
+
+- Copies Pivot-specific configuration files into the new worktree
+- Runs `dotnet build` (can be skipped via prompt)
+- Runs `update-service-worker-appsettings`
+
+## Bash Scripts
+
+For non-interactive usage (CI, scripting), the underlying shell scripts are available directly:
 
 ```bash
-bash src/delete-worktree.sh --source-path /c/code/pivot-backend --worktree my-feature --force
+# Create a worktree
+scripts/create-worktree.sh \
+  --source-path <path> \
+  --worktree <name> \
+  --branch <branch> \
+  [--remote <ref>] \
+  [--config <json-path>]
+
+# Delete a worktree
+scripts/delete-worktree.sh \
+  --source-path <path> \
+  --worktree <name> \
+  [--no-delete-branch] \
+  [--force] \
+  [--dry-run]
+
+# Pivot-specific create
+scripts/pivot-create-worktree.sh \
+  --worktree <name> \
+  --branch <branch> \
+  [--source-path <path>] \
+  [--remote <ref>] \
+  [--skip-steps]
 ```
 
-Optional alias:
+## Development
 
 ```bash
-alias dw='bash /c/code/git-worktrees/src/delete-worktree.sh'
+npm run type-check       # TypeScript type checking
+npm run test             # Run unit tests
+npm run test:coverage    # Run tests with coverage report
+```
+
+> [!NOTE]
+> The project enforces 100% code coverage across all lines, branches, functions, and statements.
+
+## Project Structure
+
+```
+src/
+├── index.ts     # Entry point and interactive menu
+├── create.ts    # Create worktree workflow
+├── delete.ts    # Delete worktree workflow
+├── git.ts       # Git operations (execSync wrappers)
+└── pivot.ts     # Pivot-specific post-creation steps
+scripts/
+├── create-worktree.sh
+├── delete-worktree.sh
+└── pivot-create-worktree.sh
+tests/           # Unit tests (Vitest)
+configs/
+└── pivot.json   # Copy operations config for Pivot projects
 ```

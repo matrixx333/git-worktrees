@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"spawnSync\\\\|execSync\\\\|spawn\" src/*.ts)",
+      "Bash(npm install:*)",
+      "Bash(npm test:*)"
+    ]
+  }
+}
