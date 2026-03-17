@@ -9,6 +9,7 @@ vi.mock('../src/git.js', async (importOriginal) => {
     branchExists: vi.fn(),
     checkRefFormat: vi.fn(),
     execGit: vi.fn(),
+    execGitAsync: vi.fn(),
     remoteReachable: vi.fn(),
     getGitRoot: vi.fn(),
     listLocalBranches: vi.fn(),
@@ -19,11 +20,11 @@ vi.mock('../src/git.js', async (importOriginal) => {
 
 import { existsSync } from 'fs';
 import * as p from '@clack/prompts';
-import { GitError, execGit, fuzzyMatchBranch } from '../src/git.js';
+import { GitError, execGitAsync, fuzzyMatchBranch } from '../src/git.js';
 import { runDelete } from '../src/delete.js';
 
 const mockExistsSync = vi.mocked(existsSync);
-const mockExecGit = vi.mocked(execGit);
+const mockExecGitAsync = vi.mocked(execGitAsync);
 const mockFuzzyMatchBranch = vi.mocked(fuzzyMatchBranch);
 
 const spinnerMock = { start: vi.fn(), stop: vi.fn() };
@@ -51,7 +52,7 @@ beforeEach(() => {
   vi.mocked(p.cancel).mockImplementation(() => {});
 
   mockExistsSync.mockReturnValue(true);
-  mockExecGit.mockReturnValue('');
+  mockExecGitAsync.mockResolvedValue('');
   mockFuzzyMatchBranch.mockReturnValue('feat/login');
 
   vi.spyOn(process, 'exit').mockImplementation((_code?: any) => {
@@ -128,11 +129,11 @@ describe('runDelete - worktree removal succeeds', () => {
     expect(spinnerMock.stop).toHaveBeenCalledWith(expect.stringContaining('Worktree removed'));
   });
 
-  it('normalises backslashes in the path passed to execGit', async () => {
+  it('normalises backslashes in the path passed to execGitAsync', async () => {
     setupHappyPath(false);
     mockFuzzyMatchBranch.mockReturnValue(null);
     await runDelete('C:\\git\\root');
-    const removeCall = mockExecGit.mock.calls.find((c) => c[0].includes('remove'));
+    const removeCall = mockExecGitAsync.mock.calls.find((c) => c[0].includes('remove'));
     expect(removeCall?.[0].join(' ')).not.toContain('\\');
   });
 });
@@ -143,7 +144,7 @@ describe('runDelete - worktree removal succeeds', () => {
 describe('runDelete - removal fails with GitError', () => {
   it('cancels with err.message and exits 1', async () => {
     setupHappyPath(true);
-    mockExecGit.mockImplementationOnce(() => { throw new GitError('locked'); });
+    mockExecGitAsync.mockRejectedValueOnce(new GitError('locked'));
 
     await expect(runDelete('/git/root')).rejects.toThrow('process.exit(1)');
     expect(spinnerMock.stop).toHaveBeenCalledWith('Failed to remove worktree.');
@@ -157,7 +158,7 @@ describe('runDelete - removal fails with GitError', () => {
 describe('runDelete - removal fails with non-GitError', () => {
   it('cancels with String(err) and exits 1', async () => {
     setupHappyPath(true);
-    mockExecGit.mockImplementationOnce(() => { throw new Error('unexpected'); });
+    mockExecGitAsync.mockRejectedValueOnce(new Error('unexpected'));
 
     await expect(runDelete('/git/root')).rejects.toThrow('process.exit(1)');
     expect(p.cancel).toHaveBeenCalledWith('Error: unexpected');
@@ -168,12 +169,12 @@ describe('runDelete - removal fails with non-GitError', () => {
 // Worktree path does not exist
 // ---------------------------------------------------------------------------
 describe('runDelete - worktree path missing', () => {
-  it('warns without calling execGit for removal', async () => {
+  it('warns without calling execGitAsync for removal', async () => {
     setupHappyPath(false);
     mockExistsSync.mockReturnValue(false);
     await runDelete('/git/root');
     expect(p.log.warn).toHaveBeenCalledWith(expect.stringContaining('does not exist'));
-    expect(mockExecGit).not.toHaveBeenCalled();
+    expect(mockExecGitAsync).not.toHaveBeenCalled();
   });
 });
 
@@ -200,8 +201,8 @@ describe('runDelete - no unique branch match', () => {
     expect(p.log.warn).toHaveBeenCalledWith(
       expect.stringContaining('No unique branch matched')
     );
-    // Only one execGit call (worktree remove), no branch -D call
-    expect(mockExecGit.mock.calls.every((c) => !c[0].includes('-D'))).toBe(true);
+    // Only one execGitAsync call (worktree remove), no branch -D call
+    expect(mockExecGitAsync.mock.calls.every((c) => !c[0].includes('-D'))).toBe(true);
   });
 });
 
@@ -209,10 +210,10 @@ describe('runDelete - no unique branch match', () => {
 // Branch deletion succeeds
 // ---------------------------------------------------------------------------
 describe('runDelete - branch deletion succeeds', () => {
-  it('calls execGit with branch -D and stops spinner', async () => {
+  it('calls execGitAsync with branch -D and stops spinner', async () => {
     setupHappyPath(true);
     await runDelete('/git/root');
-    const deleteCall = mockExecGit.mock.calls.find((c) => c[0].includes('-D'));
+    const deleteCall = mockExecGitAsync.mock.calls.find((c) => c[0].includes('-D'));
     expect(deleteCall).toBeDefined();
     expect(spinnerMock.stop).toHaveBeenCalledWith(expect.stringContaining('Branch deleted'));
   });
@@ -224,9 +225,9 @@ describe('runDelete - branch deletion succeeds', () => {
 describe('runDelete - branch deletion fails with GitError', () => {
   it('cancels and exits 1', async () => {
     setupHappyPath(true);
-    mockExecGit
-      .mockReturnValueOnce('') // worktree remove succeeds
-      .mockImplementationOnce(() => { throw new GitError('cannot delete'); });
+    mockExecGitAsync
+      .mockResolvedValueOnce('') // worktree remove succeeds
+      .mockRejectedValueOnce(new GitError('cannot delete'));
 
     await expect(runDelete('/git/root')).rejects.toThrow('process.exit(1)');
     expect(spinnerMock.stop).toHaveBeenCalledWith('Failed to delete branch.');
@@ -240,9 +241,9 @@ describe('runDelete - branch deletion fails with GitError', () => {
 describe('runDelete - branch deletion fails with non-GitError', () => {
   it('uses String(err) in cancel message', async () => {
     setupHappyPath(true);
-    mockExecGit
-      .mockReturnValueOnce('')
-      .mockImplementationOnce(() => { throw new Error('other'); });
+    mockExecGitAsync
+      .mockResolvedValueOnce('')
+      .mockRejectedValueOnce(new Error('other'));
 
     await expect(runDelete('/git/root')).rejects.toThrow('process.exit(1)');
     expect(p.cancel).toHaveBeenCalledWith('Error: other');

@@ -1,4 +1,7 @@
-import { execSync } from 'child_process';
+import { execSync, exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 export class GitError extends Error {
   constructor(message: string) {
@@ -12,6 +15,20 @@ export function getGitRoot(): string {
     return execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
   } catch {
     throw new GitError('Not inside a git repository.');
+  }
+}
+
+export async function execGitAsync(args: string[]): Promise<string> {
+  try {
+    const { stdout } = await execAsync(`git ${args.join(' ')}`);
+    return stdout.trim();
+  } catch (err: unknown) {
+    const stderr =
+      err instanceof Error && 'stderr' in err
+        ? String((err as NodeJS.ErrnoException & { stderr: unknown }).stderr).trim()
+        : String(err);
+    const cmd = args[0] ?? 'command';
+    throw new GitError(stderr || `git ${cmd} failed`);
   }
 }
 

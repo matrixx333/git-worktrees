@@ -6,7 +6,7 @@ import {
   GitError,
   branchExists,
   checkRefFormat,
-  execGit,
+  execGitAsync,
   remoteReachable,
 } from './git.js';
 import { loadPivotConfig, runPivotSteps } from './pivot.js';
@@ -99,7 +99,7 @@ export async function runCreate(gitRoot: string): Promise<void> {
   spinner.start(`Creating worktree at ${destPath}…`);
 
   try {
-    execGit([
+    await execGitAsync([
       'worktree', 'add', '--track',
       '-b', branchName,
       '--',

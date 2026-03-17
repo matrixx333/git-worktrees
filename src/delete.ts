@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { GitError, execGit, fuzzyMatchBranch } from './git.js';
+import { GitError, execGitAsync, fuzzyMatchBranch } from './git.js';
 
 export async function runDelete(gitRoot: string): Promise<void> {
   const destBase = gitRoot + '.worktree';
@@ -36,7 +36,7 @@ export async function runDelete(gitRoot: string): Promise<void> {
   if (existsSync(destPath)) {
     spinner.start(`Removing worktree at ${destPath}…`);
     try {
-      execGit(['worktree', 'remove', '-f', '--', destPath.replace(/\\/g, '/')]);
+      await execGitAsync(['worktree', 'remove', '-f', '--', destPath.replace(/\\/g, '/')]);
       spinner.stop(`Worktree removed: ${destPath}`);
     } catch (err) {
       spinner.stop('Failed to remove worktree.');
@@ -62,7 +62,7 @@ export async function runDelete(gitRoot: string): Promise<void> {
 
   spinner.start(`Deleting branch "${branch}"…`);
   try {
-    execGit(['branch', '-D', '--', branch]);
+    await execGitAsync(['branch', '-D', '--', branch]);
     spinner.stop(`Branch deleted: ${branch}`);
   } catch (err) {
     spinner.stop('Failed to delete branch.');

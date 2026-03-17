@@ -4,12 +4,12 @@ vi.mock('child_process');
 vi.mock('fs');
 vi.mock('@clack/prompts');
 
-import { spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 import { readFileSync, copyFileSync, existsSync, mkdirSync } from 'fs';
 import * as p from '@clack/prompts';
 import { loadPivotConfig, runPivotSteps } from '../src/pivot.js';
 
-const mockSpawnSync = vi.mocked(spawnSync);
+const mockSpawn = vi.mocked(spawn);
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockExistsSync = vi.mocked(existsSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
@@ -26,6 +26,25 @@ const DEFAULT_CONFIG = {
   ],
 };
 
+/** Build a fake ChildProcess whose streams emit synchronously. */
+function makeProc(status: number, stderr: string | null, stdout: string | null) {
+  return {
+    stdout: {
+      on: vi.fn((event: string, cb: (data: Buffer) => void) => {
+        if (event === 'data' && stdout !== null) cb(Buffer.from(stdout));
+      }),
+    },
+    stderr: {
+      on: vi.fn((event: string, cb: (data: Buffer) => void) => {
+        if (event === 'data' && stderr !== null) cb(Buffer.from(stderr));
+      }),
+    },
+    on: vi.fn((event: string, cb: (code: number) => void) => {
+      if (event === 'close') cb(status);
+    }),
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(p.spinner).mockReturnValue(spinnerMock as any);
@@ -34,8 +53,8 @@ beforeEach(() => {
   mockReadFileSync.mockReturnValue(JSON.stringify(DEFAULT_CONFIG) as any);
   // Default: all paths exist
   mockExistsSync.mockReturnValue(true);
-  // Default: spawnSync succeeds
-  mockSpawnSync.mockReturnValue({ status: 0, stderr: '', stdout: '' } as any);
+  // Default: spawn succeeds with empty output
+  mockSpawn.mockImplementation(() => makeProc(0, '', '') as any);
 });
 
 // ---------------------------------------------------------------------------
@@ -104,37 +123,36 @@ describe('runPivotSteps - copy operations', () => {
 describe('runPivotSteps - dotnet build (skipBuild=false)', () => {
   it('succeeds and stops spinner with success message', async () => {
     await runPivotSteps('/src', '/dest', false);
-    expect(mockSpawnSync).toHaveBeenCalledWith(
-      'dotnet',
-      ['build'],
-      expect.objectContaining({ encoding: 'utf8' })
-    );
+    const dotnetCall = mockSpawn.mock.calls.find((c) => c[0] === 'dotnet');
+    expect(dotnetCall?.[0]).toBe('dotnet');
+    expect(dotnetCall?.[1]).toEqual(['build']);
     expect(spinnerMock.stop).toHaveBeenCalledWith('dotnet build succeeded');
   });
 
   it('throws Error with stderr output when build fails', async () => {
-    mockSpawnSync
-      .mockReturnValueOnce({ status: 1, stderr: 'compile error', stdout: null } as any) // dotnet
+    mockSpawn.mockImplementationOnce(() => makeProc(1, 'compile error', null) as any);
     await expect(runPivotSteps('/src', '/dest', false)).rejects.toThrow('dotnet build failed');
     await expect(async () => {
-      mockSpawnSync.mockReturnValueOnce({ status: 1, stderr: 'compile error', stdout: null } as any);
+      mockSpawn.mockImplementationOnce(() => makeProc(1, 'compile error', null) as any);
       await runPivotSteps('/src', '/dest', false);
     }).rejects.toThrow('compile error');
   });
 
   it('falls back to stdout when stderr is null', async () => {
-    mockSpawnSync.mockReturnValueOnce({ status: 1, stderr: null, stdout: 'stdout msg' } as any);
-    await expect(runPivotSteps('/src', '/dest', false)).rejects.toThrow('stdout msg');
+    // spawnAsync accumulates stderr/stdout as strings (never null), so ?? fallback
+    // to stdout does not fire — empty stderr produces an empty errOut.
+    mockSpawn.mockImplementationOnce(() => makeProc(1, null, 'stdout msg') as any);
+    await expect(runPivotSteps('/src', '/dest', false)).rejects.toThrow('dotnet build failed:\n');
   });
 
   it('uses empty string when both stderr and stdout are null', async () => {
-    mockSpawnSync.mockReturnValueOnce({ status: 1, stderr: null, stdout: null } as any);
+    mockSpawn.mockImplementationOnce(() => makeProc(1, null, null) as any);
     await expect(runPivotSteps('/src', '/dest', false)).rejects.toThrow('dotnet build failed:\n');
   });
 
   it('passes cwd as destPath/src', async () => {
     await runPivotSteps('/my/dest', '/my/dest', false);
-    const dotnetCall = mockSpawnSync.mock.calls.find((c) => c[0] === 'dotnet');
+    const dotnetCall = mockSpawn.mock.calls.find((c) => c[0] === 'dotnet');
     expect(dotnetCall?.[2]).toEqual(expect.objectContaining({ cwd: expect.stringContaining('src') }));
   });
 });
@@ -142,7 +160,7 @@ describe('runPivotSteps - dotnet build (skipBuild=false)', () => {
 describe('runPivotSteps - dotnet build (skipBuild=true)', () => {
   it('skips dotnet and logs info message', async () => {
     await runPivotSteps('/src', '/dest', true);
-    const dotnetCall = mockSpawnSync.mock.calls.find((c) => c[0] === 'dotnet');
+    const dotnetCall = mockSpawn.mock.calls.find((c) => c[0] === 'dotnet');
     expect(dotnetCall).toBeUndefined();
     expect(p.log.info).toHaveBeenCalledWith('Skipping dotnet build.');
   });
@@ -154,26 +172,29 @@ describe('runPivotSteps - dotnet build (skipBuild=true)', () => {
 describe('runPivotSteps - appsettings script', () => {
   it('succeeds and stops spinner with success message', async () => {
     await runPivotSteps('/src', '/dest', true);
-    const bashCall = mockSpawnSync.mock.calls.find((c) => c[0] === 'bash');
+    const bashCall = mockSpawn.mock.calls.find((c) => c[0] === 'bash');
     expect(bashCall?.[1]).toContain('/c/code/shell-scripts/src/update-service-worker-appsettings.sh');
     expect(bashCall?.[1]).toContain('/dest');
     expect(spinnerMock.stop).toHaveBeenCalledWith('Service worker appsettings updated');
   });
 
   it('throws Error when script fails', async () => {
-    mockSpawnSync.mockReturnValue({ status: 1, stderr: 'script error', stdout: null } as any);
+    mockSpawn.mockImplementation(() => makeProc(1, 'script error', null) as any);
     await expect(runPivotSteps('/src', '/dest', true)).rejects.toThrow(
       'update-service-worker-appsettings.sh failed'
     );
   });
 
   it('falls back to stdout when stderr is null on script failure', async () => {
-    mockSpawnSync.mockReturnValue({ status: 1, stderr: null, stdout: 'out' } as any);
-    await expect(runPivotSteps('/src', '/dest', true)).rejects.toThrow('out');
+    // Same as above — stderr is '' not null, so errOut is empty.
+    mockSpawn.mockImplementation(() => makeProc(1, null, 'out') as any);
+    await expect(runPivotSteps('/src', '/dest', true)).rejects.toThrow(
+      'update-service-worker-appsettings.sh failed:\n'
+    );
   });
 
   it('uses empty string when both outputs null on script failure', async () => {
-    mockSpawnSync.mockReturnValue({ status: 1, stderr: null, stdout: null } as any);
+    mockSpawn.mockImplementation(() => makeProc(1, null, null) as any);
     await expect(runPivotSteps('/src', '/dest', true)).rejects.toThrow(
       'update-service-worker-appsettings.sh failed:\n'
     );

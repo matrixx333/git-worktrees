@@ -10,6 +10,7 @@ vi.mock('../src/git.js', async (importOriginal) => {
     branchExists: vi.fn(),
     checkRefFormat: vi.fn(),
     execGit: vi.fn(),
+    execGitAsync: vi.fn(),
     remoteReachable: vi.fn(),
     getGitRoot: vi.fn(),
     listLocalBranches: vi.fn(),
@@ -26,7 +27,7 @@ import {
   GitError,
   branchExists,
   checkRefFormat,
-  execGit,
+  execGitAsync,
   remoteReachable,
 } from '../src/git.js';
 import { loadPivotConfig, runPivotSteps } from '../src/pivot.js';
@@ -38,7 +39,7 @@ const mockExistsSync = vi.mocked(existsSync);
 const mockCpSync = vi.mocked(cpSync);
 const mockBranchExists = vi.mocked(branchExists);
 const mockCheckRefFormat = vi.mocked(checkRefFormat);
-const mockExecGit = vi.mocked(execGit);
+const mockExecGitAsync = vi.mocked(execGitAsync);
 const mockRemoteReachable = vi.mocked(remoteReachable);
 const mockLoadPivotConfig = vi.mocked(loadPivotConfig);
 const mockRunPivotSteps = vi.mocked(runPivotSteps);
@@ -96,7 +97,7 @@ beforeEach(() => {
   mockBranchExists.mockReturnValue(false);
   mockRemoteReachable.mockReturnValue(true);
   mockExistsSync.mockReturnValue(false);
-  mockExecGit.mockReturnValue('');
+  mockExecGitAsync.mockResolvedValue('');
   mockSpawnSync.mockReturnValue({ status: 0, error: undefined } as any);
   mockLoadPivotConfig.mockReturnValue({
     sourcePath: '/pivot/root',
@@ -130,7 +131,7 @@ describe('runCreate - non-pivot happy path', () => {
     setupHappyPath(false);
     await runCreate('/git/root');
     expect(mockLoadPivotConfig).not.toHaveBeenCalled();
-    expect(mockExecGit).toHaveBeenCalledWith(
+    expect(mockExecGitAsync).toHaveBeenCalledWith(
       expect.arrayContaining(['worktree', 'add'])
     );
     expect(p.log.success).toHaveBeenCalled();
@@ -330,7 +331,7 @@ describe('runCreate - remote unreachable', () => {
 describe('runCreate - execGit throws GitError', () => {
   it('stops spinner, cancels, attempts rollback, exits 1', async () => {
     setupHappyPath(false);
-    mockExecGit.mockImplementationOnce(() => { throw new GitError('bad worktree'); });
+    mockExecGitAsync.mockRejectedValueOnce(new GitError('bad worktree'));
     mockExecSync.mockImplementationOnce(() => { throw new Error('rollback also failed'); });
 
     await expect(runCreate('/git/root')).rejects.toThrow('process.exit(1)');
@@ -349,7 +350,7 @@ describe('runCreate - execGit throws GitError', () => {
 describe('runCreate - execGit throws non-GitError', () => {
   it('uses String(err) as cancel message', async () => {
     setupHappyPath(false);
-    mockExecGit.mockImplementationOnce(() => { throw new Error('unexpected'); });
+    mockExecGitAsync.mockRejectedValueOnce(new Error('unexpected'));
 
     await expect(runCreate('/git/root')).rejects.toThrow('process.exit(1)');
     expect(p.cancel).toHaveBeenCalledWith('Error: unexpected');

@@ -2,7 +2,22 @@ import * as p from '@clack/prompts';
 import { readFileSync, copyFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { spawnSync } from 'child_process';
+import { spawn } from 'child_process';
+
+function spawnAsync(
+  cmd: string,
+  args: string[],
+  options: { cwd?: string; shell?: boolean }
+): Promise<{ stdout: string; stderr: string; status: number }> {
+  return new Promise((resolve) => {
+    const proc = spawn(cmd, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (d: Buffer) => { stdout += String(d); });
+    proc.stderr.on('data', (d: Buffer) => { stderr += String(d); });
+    proc.on('close', (code) => resolve({ stdout, stderr, status: code ?? 1 }));
+  });
+}
 
 export interface PivotConfig {
   sourcePath: string;
@@ -54,10 +69,8 @@ export async function runPivotSteps(
     const buildCwd = join(destPath, 'src');
     buildSpinner.start('Running dotnet build…');
 
-    const buildResult = spawnSync('dotnet', ['build'], {
+    const buildResult = await spawnAsync('dotnet', ['build'], {
       cwd: buildCwd,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      encoding: 'utf8',
       shell: process.platform === 'win32',
     });
 
@@ -77,10 +90,7 @@ export async function runPivotSteps(
   appsettingsSpinner.start('Updating service worker appsettings…');
 
   const scriptPath = '/c/code/shell-scripts/src/update-service-worker-appsettings.sh';
-  const appsResult = spawnSync('bash', [scriptPath, destPath], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    encoding: 'utf8',
-  });
+  const appsResult = await spawnAsync('bash', [scriptPath, destPath], {});
 
   if (appsResult.status !== 0) {
     appsettingsSpinner.stop('update-service-worker-appsettings.sh failed.');
