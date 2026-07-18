@@ -1,5 +1,9 @@
 # git-worktrees
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="git-worktrees interactive menu" width="720">
+</p>
+
 > Interactive CLI for creating and managing Git worktrees with guided prompts and project-specific workflows.
 
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
